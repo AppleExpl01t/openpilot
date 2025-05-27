@@ -45,6 +45,12 @@ class CarControllerParams:
       self.STEER_MAX = 270
       self.STEER_DELTA_UP = 2
       self.STEER_DELTA_DOWN = 3
+    elif CP.carFingerprint == CAR.HYUNDAI_SONATA:
+      self.STEER_MAX = 400
+      self.STEER_DELTA_UP = 3
+      self.STEER_DELTA_DOWN = 7
+      self.STEER_DRIVER_ALLOWANCE = 52
+      self.STEER_THRESHOLD = 156
 
     # Default for most HKG
     else:
