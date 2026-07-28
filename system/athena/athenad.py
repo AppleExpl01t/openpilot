@@ -41,6 +41,7 @@ from openpilot.system.athena.registration import UNREGISTERED_DONGLE_ID
 from openpilot.system.version import get_build_metadata
 from openpilot.system.hardware.hw import Paths
 
+from openpilot.starpilot.common.remote_services import REMOTE_SERVICES_DISABLED
 from openpilot.starpilot.common.starpilot_utilities import use_konik_server
 
 
@@ -828,6 +829,10 @@ def wait_for_exit(exit_event: threading.Event | None, timeout: float) -> bool:
 
 
 def main(exit_event: threading.Event = None):
+  if REMOTE_SERVICES_DISABLED:
+    cloudlog.info("athenad disabled, not connecting")
+    return
+
   try:
     set_core_affinity([0, 1, 2, 3])
   except Exception:

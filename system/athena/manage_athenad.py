@@ -8,11 +8,16 @@ from openpilot.system.manager.process import launcher
 from openpilot.common.swaglog import cloudlog
 from openpilot.system.hardware import HARDWARE
 from openpilot.system.version import get_build_metadata
+from openpilot.starpilot.common.remote_services import REMOTE_SERVICES_DISABLED
 
 ATHENA_MGR_PID_PARAM = "AthenadPid"
 
 
 def main():
+  if REMOTE_SERVICES_DISABLED:
+    cloudlog.info("athena disabled, not starting")
+    return
+
   params = Params()
   dongle_id = params.get("DongleId")
   build_metadata = get_build_metadata()

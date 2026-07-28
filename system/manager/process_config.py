@@ -9,6 +9,7 @@ from cereal import car
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE, PC, TICI
 from openpilot.system.manager.process import PythonProcess, NativeProcess, DaemonProcess
+from openpilot.starpilot.common.remote_services import REMOTE_SERVICES_DISABLED
 
 WEBCAM = os.getenv("USE_WEBCAM") is not None
 UI_WATCHDOG_MAX_DT = int(os.getenv("UI_WATCHDOG_MAX_DT", "10"))
@@ -73,6 +74,8 @@ def allow_logging(started: bool, params: Params, CP: car.CarParams, starpilot_to
   return not starpilot_toggles.no_logging
 
 def allow_uploads(started: bool, params: Params, CP: car.CarParams, starpilot_toggles: SimpleNamespace) -> bool:
+  if REMOTE_SERVICES_DISABLED:
+    return False
   return params.get_bool("AlwaysAllowUploads") or not starpilot_toggles.no_uploads or starpilot_toggles.no_onroad_uploads
 
 def run_speed_limit_filler(started: bool, params: Params, CP: car.CarParams, starpilot_toggles: SimpleNamespace) -> bool:
@@ -169,7 +172,7 @@ class BigDeviceUIProcess:
 
 
 procs = [
-  DaemonProcess("manage_athenad", "system.athena.manage_athenad", "AthenadPid"),
+  DaemonProcess("manage_athenad", "system.athena.manage_athenad", "AthenadPid", enabled=not REMOTE_SERVICES_DISABLED),
 
   NativeProcess("loggerd", "system/loggerd", ["./loggerd"], and_(allow_logging, logging)),
   NativeProcess("encoderd", "system/loggerd", ["./encoderd"], and_(allow_logging, only_onroad)),

@@ -18,6 +18,7 @@ from openpilot.common.realtime import set_core_affinity
 from openpilot.system.hardware.hw import Paths
 from openpilot.system.loggerd.xattr_cache import getxattr, setxattr
 from openpilot.common.swaglog import cloudlog
+from openpilot.starpilot.common.remote_services import REMOTE_SERVICES_DISABLED
 
 NetworkType = log.DeviceState.NetworkType
 UPLOAD_ATTR_NAME = 'user.upload'
@@ -228,6 +229,10 @@ class Uploader:
 
 
 def main(exit_event: threading.Event | None = None) -> None:
+  if REMOTE_SERVICES_DISABLED:
+    cloudlog.info("uploads disabled, uploader not starting")
+    return
+
   if exit_event is None:
     exit_event = threading.Event()
 

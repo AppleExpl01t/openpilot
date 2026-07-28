@@ -14,6 +14,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.system.hardware.hw import Paths
 from openpilot.system.version import get_build_metadata, get_version
 
+from openpilot.starpilot.common.remote_services import REMOTE_SERVICES_DISABLED
 from openpilot.starpilot.common.starpilot_variables import ERROR_LOGS_PATH, params
 
 class SentryProject(Enum):
@@ -126,6 +127,10 @@ def save_exception(exc_text: str, crash_log) -> None:
 
 
 def init(project: SentryProject) -> bool:
+  if REMOTE_SERVICES_DISABLED:
+    # never configure a client, so every capture_* call below is a local no-op
+    return False
+
   if PC:
     return False
 
