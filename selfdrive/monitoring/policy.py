@@ -73,7 +73,10 @@ class DRIVER_MONITOR_SETTINGS:
     self._EYE_THRESHOLD = 0.65
     self._SG_THRESHOLD = 0.9
     self._BLINK_THRESHOLD = 0.865
-    self._PHONE_THRESH = 0.5
+    # raised from 0.5: the classifier fires on held objects that aren't phones.
+    # gaze (pose) and eye closure are unaffected and still catch looking away.
+    # tune with selfdrive/debug/phone_prob_monitor.py
+    self._PHONE_THRESH = 0.85
     self._POSE_PITCH_THRESHOLD = 0.3133
     self._POSE_PITCH_THRESHOLD_SLACK = 0.3237
     self._POSE_PITCH_THRESHOLD_STRICT = self._POSE_PITCH_THRESHOLD
