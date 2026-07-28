@@ -13,7 +13,7 @@ DISTRACTED_SECONDS_TO_RED = dm_settings._VISION_POLICY_ALERT_3_TIMEOUT + 1
 INVISIBLE_SECONDS_TO_ORANGE = dm_settings._WHEELTOUCH_POLICY_ALERT_2_TIMEOUT + 1
 INVISIBLE_SECONDS_TO_RED = dm_settings._WHEELTOUCH_POLICY_ALERT_3_TIMEOUT + 1
 
-def make_msg(face_detected, distracted=False, model_uncertain=False):
+def make_msg(face_detected, distracted=False, model_uncertain=False, phone_prob=0.):
   ds = log.DriverStateV2.new_message()
   ds.leftDriverData.faceOrientation = [0., 0., 0.]
   ds.leftDriverData.facePosition = [0., 0.]
@@ -25,7 +25,7 @@ def make_msg(face_detected, distracted=False, model_uncertain=False):
   ds.leftDriverData.faceOrientationStd = [1.*model_uncertain, 1.*model_uncertain, 1.*model_uncertain]
   ds.leftDriverData.facePositionStd = [1.*model_uncertain, 1.*model_uncertain]
   # TODO: test both separately when e2e is used
-  ds.leftDriverData.phoneProb = 0.
+  ds.leftDriverData.phoneProb = phone_prob
   return ds
 
 
@@ -36,6 +36,8 @@ msg_DISTRACTED = make_msg(True, distracted=True)
 msg_ATTENTIVE_UNCERTAIN = make_msg(True, model_uncertain=True)
 msg_DISTRACTED_UNCERTAIN = make_msg(True, distracted=True, model_uncertain=True)
 msg_DISTRACTED_BUT_SOMEHOW_UNCERTAIN = make_msg(True, distracted=True, model_uncertain=dm_settings._HI_STD_THRESHOLD*1.5)
+# attentive gaze and open eyes, but the phone classifier is saturated
+msg_ATTENTIVE_PHONE_PROB = make_msg(True, phone_prob=1.)
 
 # driver interaction with car
 car_interaction_DETECTED = True
@@ -45,6 +47,7 @@ car_interaction_NOT_DETECTED = False
 always_no_face = [msg_NO_FACE_DETECTED] * int(TEST_TIMESPAN / DT_DMON)
 always_attentive = [msg_ATTENTIVE] * int(TEST_TIMESPAN / DT_DMON)
 always_distracted = [msg_DISTRACTED] * int(TEST_TIMESPAN / DT_DMON)
+always_attentive_phone_prob = [msg_ATTENTIVE_PHONE_PROB] * int(TEST_TIMESPAN / DT_DMON)
 always_true = [True] * int(TEST_TIMESPAN / DT_DMON)
 always_false = [False] * int(TEST_TIMESPAN / DT_DMON)
 
@@ -110,20 +113,35 @@ class TestMonitoring:
                     (TEST_TIMESPAN - 10 - s._VISION_POLICY_ALERT_3_TIMEOUT) / 2) / DT_DMON)] == 3
     assert isinstance(d_status.awareness, float)
 
-  # engaged, distracted past red and beyond the no-response window -> unavailability response + lockout
-  def test_distracted_lockout(self):
+  # engaged, distracted past red and beyond the no-response window.
+  # the re-engagement lockout is disabled in this fork, so it must never latch,
+  # but the forced deceleration that stops the car must still be commanded.
+  def test_distracted_no_lockout_but_still_force_decel(self):
     alert_lvls, d_status = self._run_seq(always_distracted, always_false, always_true, always_false)
     assert alert_lvls[int(DISTRACTED_SECONDS_TO_RED / DT_DMON)] == 3
-    assert d_status.lockout_active
-    assert d_status.lockout_time_elapsed > 0
-    assert d_status.lockout_count >= 1
+    assert not d_status.settings._LOCKOUT_ENABLED
+    assert not d_status.lockout_active
+    assert d_status.lockout_count == 0
+    assert d_status.lockout_time_elapsed == 0
+    # this field is what controlsd turns into controlsState.forceDecel
+    assert d_status.get_state_packet().driverMonitoringState.noResponseForceDecel
 
-  # no face -> wheeltouch red, sustained past the no-response timeout -> unavailability response + lockout
-  def test_invisible_lockout(self):
+  # no face -> wheeltouch red, sustained past the no-response timeout.
+  # same contract as above on the wheeltouch policy.
+  def test_invisible_no_lockout_but_still_force_decel(self):
     _, d_status = self._run_seq(always_no_face, always_false, always_true, always_false)
     assert d_status.active_policy == log.DriverMonitoringState.MonitoringPolicy.wheeltouch
-    assert d_status.lockout_active
-    assert d_status.lockout_count >= 1
+    assert not d_status.lockout_active
+    assert d_status.lockout_count == 0
+    assert d_status.get_state_packet().driverMonitoringState.noResponseForceDecel
+
+  # the phone classifier is disabled: a saturated phoneProb must not escalate on
+  # its own while gaze and eyes say the driver is attentive
+  def test_phone_prob_alone_does_not_escalate(self):
+    alert_lvls, d_status = self._run_seq(always_attentive_phone_prob, always_false, always_true, always_false)
+    assert not d_status.settings._PHONE_DETECTOR_ENABLED
+    assert not d_status.distracted_types['phone']
+    assert all(a == 0 for a in alert_lvls)
 
   # engaged, no face detected the whole time, no action
   def test_fully_invisible_driver(self):
