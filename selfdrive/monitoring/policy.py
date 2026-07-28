@@ -74,9 +74,15 @@ class DRIVER_MONITOR_SETTINGS:
     self._SG_THRESHOLD = 0.9
     self._BLINK_THRESHOLD = 0.865
     # raised from 0.5: the classifier fires on held objects that aren't phones.
+    # amplitude alone does not separate them (a wallet measured 0.91 against a
+    # phone at 0.97), so the flag additionally has to persist, see below.
     # gaze (pose) and eye closure are unaffected and still catch looking away.
-    # tune with selfdrive/debug/phone_prob_monitor.py
+    # tune both with selfdrive/debug/phone_prob_monitor.py
     self._PHONE_THRESH = 0.85
+    # seconds the detection must hold above _PHONE_THRESH before it counts
+    self._PHONE_SUSTAIN_TIME = 3.0
+    # seconds below _PHONE_THRESH before a latched detection drains fully
+    self._PHONE_RELEASE_TIME = 1.0
     self._POSE_PITCH_THRESHOLD = 0.3133
     self._POSE_PITCH_THRESHOLD_SLACK = 0.3237
     self._POSE_PITCH_THRESHOLD_STRICT = self._POSE_PITCH_THRESHOLD
@@ -164,6 +170,9 @@ class DriverMonitoring:
     self.pose = DriverPose(settings=self.settings)
     self.blink = DriverBlink()
     self.phone_prob = 0.
+    self.phone_sustain_frames = max(int(self.settings._PHONE_SUSTAIN_TIME / DT_DMON), 1)
+    self.phone_release_step = max(self.phone_sustain_frames // max(int(self.settings._PHONE_RELEASE_TIME / DT_DMON), 1), 1)
+    self.phone_sustain_cnt = 0
 
     self.alert_level = AlertLevel.none
     self.always_on = always_on
@@ -265,7 +274,13 @@ class DriverMonitoring:
 
     self.distracted_types['pose'] = bool((pitch_error > pitch_threshold) or (yaw_error > yaw_threshold))
     self.distracted_types['eye'] = bool((self.blink.left + self.blink.right)*0.5 > self.settings._BLINK_THRESHOLD)
-    self.distracted_types['phone'] = bool(self.phone_prob > self.settings._PHONE_THRESH)
+    # a fidgeted object drifts in and out of the classifier; actual phone use holds.
+    # integrate up while detected and drain when not, so only sustained hits count.
+    if self.phone_prob > self.settings._PHONE_THRESH:
+      self.phone_sustain_cnt = min(self.phone_sustain_cnt + 1, self.phone_sustain_frames)
+    else:
+      self.phone_sustain_cnt = max(self.phone_sustain_cnt - self.phone_release_step, 0)
+    self.distracted_types['phone'] = bool(self.phone_sustain_cnt >= self.phone_sustain_frames)
 
   def _update_states(self, driver_state, cal_rpy, car_speed, op_engaged, lowspeed, demo_mode=False, steering_angle_deg=0.):
     rhd_pred = driver_state.wheelOnRightProb
