@@ -78,6 +78,10 @@ class DRIVER_MONITOR_SETTINGS:
     # phone at 0.97), so the flag additionally has to persist, see below.
     # gaze (pose) and eye closure are unaffected and still catch looking away.
     # tune both with selfdrive/debug/phone_prob_monitor.py
+    # the phone classifier is disabled: it reads a held wallet at 0.91 against a
+    # phone at 0.97, which neither amplitude nor duration reliably separates.
+    # pose (gaze) and eye closure are untouched and remain the primary signals.
+    self._PHONE_DETECTOR_ENABLED = False
     self._PHONE_THRESH = 0.85
     # seconds the detection must hold above _PHONE_THRESH before it counts
     self._PHONE_SUSTAIN_TIME = 3.0
@@ -274,13 +278,17 @@ class DriverMonitoring:
 
     self.distracted_types['pose'] = bool((pitch_error > pitch_threshold) or (yaw_error > yaw_threshold))
     self.distracted_types['eye'] = bool((self.blink.left + self.blink.right)*0.5 > self.settings._BLINK_THRESHOLD)
-    # a fidgeted object drifts in and out of the classifier; actual phone use holds.
-    # integrate up while detected and drain when not, so only sustained hits count.
-    if self.phone_prob > self.settings._PHONE_THRESH:
-      self.phone_sustain_cnt = min(self.phone_sustain_cnt + 1, self.phone_sustain_frames)
+    if not self.settings._PHONE_DETECTOR_ENABLED:
+      self.phone_sustain_cnt = 0
+      self.distracted_types['phone'] = False
     else:
-      self.phone_sustain_cnt = max(self.phone_sustain_cnt - self.phone_release_step, 0)
-    self.distracted_types['phone'] = bool(self.phone_sustain_cnt >= self.phone_sustain_frames)
+      # a fidgeted object drifts in and out of the classifier; actual phone use holds.
+      # integrate up while detected and drain when not, so only sustained hits count.
+      if self.phone_prob > self.settings._PHONE_THRESH:
+        self.phone_sustain_cnt = min(self.phone_sustain_cnt + 1, self.phone_sustain_frames)
+      else:
+        self.phone_sustain_cnt = max(self.phone_sustain_cnt - self.phone_release_step, 0)
+      self.distracted_types['phone'] = bool(self.phone_sustain_cnt >= self.phone_sustain_frames)
 
   def _update_states(self, driver_state, cal_rpy, car_speed, op_engaged, lowspeed, demo_mode=False, steering_angle_deg=0.):
     rhd_pred = driver_state.wheelOnRightProb
