@@ -51,14 +51,17 @@ class DRIVER_MONITOR_SETTINGS:
     self._WHEELTOUCH_POLICY_ALERT_1_TIMEOUT = 5.
     self._WHEELTOUCH_POLICY_ALERT_2_TIMEOUT = 15.
     self._WHEELTOUCH_POLICY_ALERT_3_TIMEOUT = 25.
-    self._VISION_POLICY_ALERT_1_TIMEOUT = 5.
-    self._VISION_POLICY_ALERT_2_TIMEOUT = 8.
-    self._VISION_POLICY_ALERT_3_TIMEOUT = 13.
+    # extended warning phase: stock is 5/8/13
+    self._VISION_POLICY_ALERT_1_TIMEOUT = 25.
+    self._VISION_POLICY_ALERT_2_TIMEOUT = 40.
+    self._VISION_POLICY_ALERT_3_TIMEOUT = 60.
 
     # no response = alert_3 sustained for certain amount of time
     self._NO_RESPONSE_TIMEOUT = 5.
 
     # lockout specs
+    # re-engagement lockout disabled; forced decel at alert_3 is unaffected
+    self._LOCKOUT_ENABLED = False
     self._MAX_ALERT_3 = 2
     self._MAX_NO_RESPONSE = 1
     self._LOCKOUT_TIMES = [int(60 * n_min / DT_DMON) for n_min in [1, 5, 15, 30]]
@@ -173,7 +176,7 @@ class DriverMonitoring:
     self.cnt_since_alert_3 = 0
     self.no_response_timeout = int(self.settings._NO_RESPONSE_TIMEOUT / DT_DMON)
     self.no_response_cnt = 0
-    self.lockout_active = Params().get_bool("DriverTooDistracted")
+    self.lockout_active = self.settings._LOCKOUT_ENABLED and Params().get_bool("DriverTooDistracted")
     self.lockout_count = Params().get("DriverLockoutCount") or 0
     self.lockout_duration = self.settings._LOCKOUT_TIMES[min(max(self.lockout_count - 1, 0), len(self.settings._LOCKOUT_TIMES) - 1)]
     self.lockout_time_elapsed = 0
@@ -334,7 +337,8 @@ class DriverMonitoring:
     self.alert_level = AlertLevel.none
     self.driver_interacting = driver_engaged
 
-    if self.alert_3_cnt >= self.settings._MAX_ALERT_3 or self.no_response_cnt >= self.settings._MAX_NO_RESPONSE:
+    if self.settings._LOCKOUT_ENABLED and \
+       (self.alert_3_cnt >= self.settings._MAX_ALERT_3 or self.no_response_cnt >= self.settings._MAX_NO_RESPONSE):
       if not self.lockout_active:
         self.lockout_count += 1
         self.lockout_duration = self.settings._LOCKOUT_TIMES[min(self.lockout_count - 1, len(self.settings._LOCKOUT_TIMES) - 1)]
